@@ -1,113 +1,241 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import axios from "axios";
+import { motion } from "framer-motion";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 export default function Home() {
+  const [text, setText] = useState("");
+  const [numQuestions, setNumQuestions] = useState(5);
+  const [mcqs, setMcqs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedAnswers, setSelectedAnswers] = useState({});
+  const [score, setScore] = useState(null);
+  const [showPopup, setShowPopup] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [files, setFiles] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    // Check if both text and files are provided or neither
+    if ((text && files) || (!text && !files)) {
+      toast.error("Please provide either text input or a file, but not both.");
+      setLoading(false);
+      return;
+    }
+
+    const formData = new FormData();
+    if (files) {
+      for (const file of files) {
+        formData.append("files[]", file);
+      }
+    } else {
+      formData.append("text", text);
+    }
+    formData.append("num_questions", numQuestions);
+
+    try {
+      const response = await axios.post("http://localhost:5000/", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      setMcqs(response.data);
+      setSelectedAnswers({});
+      setScore(null);
+      setCurrentPage(0); // Reset pagination
+    } catch (error) {
+      console.error("Error fetching MCQs:", error);
+      toast.error("Failed to generate MCQs");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOptionChange = (questionIndex, option) => {
+    if (selectedAnswers[questionIndex] === undefined) {
+      setSelectedAnswers((prev) => ({
+        ...prev,
+        [questionIndex]: option,
+      }));
+    }
+  };
+
+  const handleCheckAnswers = () => {
+    let newScore = 0;
+    mcqs.forEach(([questionText, options, correctAnswerIndex], index) => {
+      if (selectedAnswers[index] === options[correctAnswerIndex]) {
+        newScore += 1;
+      }
+    });
+    setScore(newScore);
+    setShowPopup(true);
+  };
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 0 && newPage < mcqs.length) {
+      setCurrentPage(newPage);
+    }
+  };
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">app/page.js</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:h-auto lg:w-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-gray-100 p-6">
+      <div className="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-md">
+        <h1 className="text-3xl font-bold mb-4 text-center text-blue-400">
+          MCQ Generator
+        </h1>
+        <form onSubmit={handleSubmit} encType="multipart/form-data" className="space-y-4">
+          <div>
+            <label htmlFor="text" className="block text-gray-300">
+              Text:
+            </label>
+            <textarea
+              id="text"
+              name="text"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              className="w-full p-2 border border-gray-600 rounded-lg bg-gray-700"
+              rows="4"
+              placeholder="Enter text here"
             />
-          </a>
-        </div>
+          </div>
+            <div>
+            <label htmlFor="files" className="block text-gray-300">
+              Upload Files:
+            </label>
+            <input
+              type="file"
+              id="files"
+              name="files[]"
+              multiple
+              onChange={(e) => setFiles(e.target.files)}
+              className="w-full p-2 border border-gray-600 rounded-lg bg-gray-700"
+            />
+          </div>
+          <div>
+            <label htmlFor="num_questions" className="block text-gray-300">
+              Number of Questions:
+            </label>
+            <select
+              id="num_questions"
+              name="num_questions"
+              value={numQuestions}
+              onChange={(e) => setNumQuestions(parseInt(e.target.value, 10))}
+              className="w-full p-2 border border-gray-600 rounded-lg bg-gray-700"
+            >
+              {[1, 2, 3, 4, 5].map((num) => (
+                <option key={num} value={num}>
+                  {num}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="w-full bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600"
+            disabled={loading}
+          >
+            {loading ? "Generating..." : "Generate MCQs"}
+          </button>
+        </form>
+        {mcqs.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="mt-6"
+          >
+            <h2 className="text-2xl font-semibold mb-4 text-center text-blue-400">
+              Generated MCQs
+            </h2>
+            <motion.div
+              className="bg-gray-700 p-4 rounded-lg shadow-md"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3 }}
+            >
+              <h3 className="text-lg font-semibold mb-2">
+                Question {currentPage + 1}:
+              </h3>
+              <p className="mb-4">{mcqs[currentPage][0]}</p>
+              <div className="space-y-2">
+                {mcqs[currentPage][1].map((option, optionIndex) => {
+                  const optionLetter = String.fromCharCode(65 + optionIndex);
+                  const isSelected = selectedAnswers[currentPage] === option;
+                  return (
+                    <motion.div
+                      key={option}
+                      className={`p-2 border rounded-lg ${
+                        isSelected
+                          ? optionIndex === mcqs[currentPage][2]
+                            ? "bg-green-500 text-white"
+                            : "bg-red-500 text-white"
+                          : "bg-gray-600"
+                      }`}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleOptionChange(currentPage, option)}
+                    >
+                      {optionLetter}. {option}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </motion.div>
+            <div className="mt-4 flex justify-between">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 disabled:opacity-50"
+                disabled={currentPage === 0}
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 disabled:opacity-50"
+                disabled={currentPage === mcqs.length - 1}
+              >
+                Next
+              </button>
+            </div>
+            {currentPage === mcqs.length - 1 && (
+              <button
+                onClick={handleCheckAnswers}
+                className="mt-4 w-full bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+              >
+                Check Score
+              </button>
+            )}
+          </motion.div>
+        )}
       </div>
 
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-full sm:before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full sm:after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 before:lg:h-[360px] z-[-1]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
-
-      <div className="mb-32 grid text-center lg:max-w-5xl lg:w-full lg:mb-0 lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
+      <ToastContainer />
+      {showPopup && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+          className="fixed inset-0 flex items-center justify-center bg-gray-800 bg-opacity-75"
         >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800 hover:dark:bg-opacity-30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Explore starter templates for Next.js.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50 text-balance`}>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
+          <div className="bg-gray-900 p-6 rounded-lg shadow-lg text-center">
+            <h2 className="text-xl font-semibold mb-4 text-blue-400">Score</h2>
+            <p className="text-lg text-white">
+              Your score: {score} / {mcqs.length}
+            </p>
+            <button
+              onClick={() => setShowPopup(false)}
+              className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+            >
+              Close
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </div>
   );
 }
