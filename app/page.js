@@ -39,7 +39,7 @@ export default function Home() {
     formData.append("num_questions", numQuestions);
 
     try {
-      const response = await axios.post("http://localhost:5000/", formData, {
+      const response = await axios.post("https://mcq-ml-backend-4.onrender.com/", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
